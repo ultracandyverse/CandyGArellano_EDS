@@ -1,0 +1,334 @@
+---
+title: "Week 1 Lab"
+subtitle: ESP 106
+author: Candy G. Arellano
+date: Jan 11, 2026
+output: 
+  html_document:
+    theme: cosmo
+---
+Note to grader: Hello, I decided to use an R Markdown because I feel like it keeps everything well-organized. 
+```{r setup, include=FALSE}
+#Don't delete this chunk
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message = FALSE)
+knitr::opts_knit$set(progress = TRUE, verbose = TRUE)
+```
+ 
+```{r}
+#this is my favorite r package, so I will be using some functions to perform tasks. I hope that is okay
+library(tidyverse)
+```
+
+#Basic Data Types
+
+```{r}
+## 1) create a vector with all uneven numbers between 1 and 25
+q1 <- seq(1,25,2)
+```
+
+```{r}
+## 2) create, and assign to a variable, a vector with the names of four California cities 
+#note that a vector can be anything that contains different little variables 
+q2 <- c("Anaheim", "Davis", "Sacramento", "Los Angeles")
+
+```
+
+```{r}
+## 3) test whether the names in the variable created above include a space, and create a new variable with only these names
+#note that a vector can be anything that contains different little variables 
+q3_spacecities <- c("Los Angeles")
+```
+
+```{r}
+## 4) change the above created (character) variable into a categorical variable (factor)
+class(q3_spacecities)
+q4 <-as.factor(q3_spacecities) 
+class(q4)
+``` 
+
+```{r}
+## 5) create a the following sequence of 20 numbers: 5, 10, 15, ..., 100
+q5_seq <- seq(from = 5, to = 100, by = 5)
+
+```
+
+#Basic Data Structures 
+
+```{r}
+## 6) create a variable 'x' that holds this matrix (without typing in all the numbers!)
+
+##     [,1] [,2] [,3] [,4]
+##[1,]    5   10   15   20
+##[2,]   25   30   35   40
+##[3,]   45   50   55   60
+##[4,]   65   70   75   80
+##[5,]   85   90   95  100
+?matrix
+
+q6_x <- matrix( data = q5_seq, ncol = 4, nrow = 5) 
+
+###viewing my matrix
+q6_x
+```
+
+```{r}
+## 7) add, to the matrix above, a column with the values 1 to 5
+
+
+column_a <- c(1,2,3,4,5)
+ 
+q7_m2 <- cbind(q6_x,column_a)
+```
+
+```{r}
+## 8) create a data.frame of the four California cities from question 2 and add two numerical variables (e.g. population) (the numbers do not matter).
+# four vectors
+ID <- as.integer(1:4)
+name <- q2
+population <- as.factor(c('1','2', '1', '2'))
+score <- as.factor(c('10', '20', '10', '20'))
+q8_d <- data.frame(name, population, score)
+
+q8_d
+
+```
+
+```{r}
+## 9) create a list than contains the answers to question 1, 2, 3, and 4
+
+q9 <- list(q1, q2, q3_spacecities, q4)
+
+```
+
+##################################################
+##    This is the lab for Wednesday, week 1     ## 
+##################################################
+
+## Indexing
+
+```{r}
+
+## 10) create a matrix by sub-setting matrix 'x' (question 6) by extracting the third and fourth column of 'x'
+?matrix
+
+###this is asking me for two columns, so
+
+q10_x <- q6_x[, c(3, 4)]
+
+###note to self: I did not use '3', '4', bc that leads to dinames error. 
+
+###viewing my results
+q10_x
+```
+
+```{r}
+## 11) which elements in matrix 'x' are larger than 80?
+
+#asking to only return values over 80
+q11 <- q10_x[q10_x >80]
+
+q11
+```
+
+## Algebra
+
+```{r} 
+## 12) create 20 random numbers between 0 and 1 
+
+###getting info on runif function
+?runif
+
+###Asking to return 20 numbers, which are all between 0 and 1
+q12 <- runif(20)
+
+
+q12
+
+```
+
+```{r}
+
+## 13) multiply them by 100
+
+q13 <- q12*100
+
+q13
+
+``` 
+
+```{r}
+
+## 14) create a 5 x 4 matrix 'y' of these numbers
+?matrix
+
+q14_y <- matrix(data = q13, nrow = 5, ncol = 4)
+
+q14_y
+``` 
+
+```{r}
+## 15) multiply this matrix with a vector of 1 to 5
+
+q15 <- q14_y * 1:5 
+
+q15
+```
+
+```{r}
+
+## 16) multiply 'y' with 'x'
+
+q16<- q14_y * q6_x
+
+q16
+
+```
+
+
+## Read and Write Files
+
+## R comes with some data sets. See `data()` for a list. These are useful for examples and exercises.  
+## E.g. "state.x77"
+
+```{r}
+## 17) Write the state.x77 data to a "text" file (e.g. "csv" format)
+
+###d will contain the built in data set state.x77
+d <- state.x77
+
+###I am writing csv, saving it as state.csv. My path is already set, so it will land in my ESP 106 folder
+write.csv(d, "state.csv")
+
+d
+
+```
+
+```{r}
+
+## 18) Read the data from this file into a variable "states"
+states <- read.csv("state.csv")
+
+```
+
+```{r}
+## 19) What is the number of columns of state.x77 and of states? And why are they different?
+
+```
+
+```{r}
+#viewing the data in table format
+view(d)
+
+#glimpse function, which comes from tidyverse libraries gives info like rows and columns. There are eight columns listed which using glimpse
+glimpse(d)
+```
+
+```{r}
+#vieiwng as table
+view(states)
+#using glimpse for quick info. 9 columns listed. 
+glimpse(states)
+```
+```{r}
+#The number of columns is different because state.x77 stores state names as row names, rather than a column. And when we write the data into a CSV, the row names turned into a regular column.    
+```
+
+
+## Data Exploration
+
+```{r}
+## 20) for each variable in state.x77, use a function to compute the minimum and a function to compute the mean value
+
+#Note that filter() won't work on columns 
+
+# minimum 
+q20_min <- apply(d, 2, min)
+
+# mean
+q20_mean <- apply(d, 2, mean)
+
+
+q20_min
+
+q20_mean
+
+
+
+```
+```{r}
+#libraries I like for tables
+library(flextable)
+library(webshot)
+```
+
+```{r}
+
+## 21) Use functions summary, table, quantile, and boxplot to summarize the data for life expectancy in the state.x77 data
+
+##so only wants info on life expectancy 
+
+#using summary function
+summary(states)
+
+```
+```{r}
+#Isolating the columns I want to stay
+state_life <- states %>%
+  summarize("State" = X , 
+            "Life Expectancy in Years" = Life.Exp)
+  
+
+state_life
+  
+
+```
+
+```{r}
+
+
+##I am going to take the mean, median, standard deviation, and interquartile range of the Life.Exp using pipes to stay organized
+
+bettertable <- state_life %>% 
+  summarize("Mean" = mean(`Life Expectancy in Years`), 
+            "Median" = median(`Life Expectancy in Years`),
+            "SD" = sd(`Life Expectancy in Years`), 
+            "IQR" = IQR(`Life Expectancy in Years`))
+
+##using table function, whcih results in a simple table
+q21table <-table(bettertable)
+
+q21table
+
+```
+
+```{r}
+
+##I want a more presentable table, so now I am going to prepare the background for my tables. I want a white/transparent background 
+set_flextable_defaults(background.color = "white")
+
+#making a table with the stats I found, for Life Expectancy 
+q21_bettertable <- flextable(bettertable) %>%
+  set_caption("Life Expectancy Statistics")%>% 
+  align(align = "center")
+
+q21_bettertable
+
+```
+
+
+```{r}
+#quantiles
+quan <- quantile(states$Life.Exp)
+
+quan
+```
+
+```{r}
+?boxplot
+#making boxplot
+box <- boxplot(state_life$`Life Expectancy in Years`, ylab = "Life Expectancy in Years")
+##note can also use ggplot 
+
+```
+
+
