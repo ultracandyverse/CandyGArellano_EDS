@@ -1,0 +1,284 @@
+---
+title: "ESP 106Lab 3"
+author: "Fran Moore"
+date: "2025-01-21"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+## ESP 106 Lab 3
+
+In this lab we will start by reading merging in data on economic development and indoor and outdoor air pollution. Then we will practice making some graphs with it.
+
+
+
+1. First read in the csv files: gdppercapitaandgini and airpollution
+
+Both datasets are from [Our World in Data](ourworldindata.org)
+The GDP dataset has GDP per capita and the GINI index (a measure of [income inequality](https://en.wikipedia.org/wiki/Gini_coefficient))  
+The air pollution dataset has death rates from indoor and outdoor air pollution - units are in deaths per 100,000 people  
+Indoor air pollution is the Household Air Pollution from Solid Fuels  
+Outdoor air pollution is split into particulate matter and ozone  
+
+Hint: Make sure to save all material for the lab into one sensible directory, probably one within your Github repository. The .csv files used in this lab are small enough to add to Github if you like. Then set that as your working directory. By default, the working directory for the Rmarkdown file will be the directory where your markdown file is saved. See more info [here](https://bookdown.org/yihui/rmarkdown-cookbook/working-directory.html)
+
+Hint: The column names are long and cumbersome (because they contain information about units et) - you might want to rename some of the columns to make them easier to work with
+
+```{r question1}
+
+#read in csv files 
+
+##loading in my fav r package 
+library(tidyverse)
+
+##gdp per capita & GINI index. 
+gdp_gini <- read.csv("~/Downloads/ESP_106/ESP 106/esp106_CandyGArellano/Week 3/gdppercapiandgini.csv")
+
+##air pollution 
+
+air_plltn <- read.csv("~/Downloads/ESP_106/ESP 106/esp106_CandyGArellano/Week 3/airpollution.csv")
+
+###I can also use the read_csv function, but I like to read in the csv as a tidyverse tibble, which are great printing and joining. 
+```
+
+```{r}
+###results 
+gdp_gini
+```
+```{r}
+air_plltn
+```
+
+
+2. Chose two **countries that you are interested in** and make a plot showing the **death rates from indoor air pollution and outdoor air pollution (sum of particulate matter and ozone) over time** 
+Distinguish the countries using different colored lines and the types of pollution using different line types     
+Make sure to add a legend and appropriate titles for the axes and plot   
+
+Hint: you can see all the different country names using unique(x$Entity) where x is the data frame containing the air pollution data
+Then create **two new data frames that contain only the rows corresponding to each of the two countries you want to look at**
+Create a **new column of total outdoor air pollution deaths by summing death rates from particulate matter and ozone**
+Use these to make your plot and add the lines you need
+
+Hint: you might have to set the y scale manually to make sure your plot is wide enough to show both countries. You can do this using the "ylim" argument in plot
+
+```{r question2}
+#country names, selecting "United Kingdom" and "India" 
+unique(gdp_gini$Entity)
+
+```
+```{r}
+#Data wrangling 
+
+##Rename them before subsetting variables
+
+###see names of variables in dataset gdp_gini 
+names(gdp_gini)
+
+```
+```{r}
+###renaming, using a pipe operator %>% & rename() function
+gdp_gini2 <- gdp_gini %>%
+  rename(tpop = "Total.population..Gapminder..HYDE...UN.",
+         GINI_Coefficient = "Gini.coefficient..World.Bank..2016..",
+         RealGDP = "Output.side.real.GDP.per.capita..gdppc_o...PWT.9.1..2019.."
+          )
+```
+
+
+```{r}
+###see the name of variables in dataset air_plltn 
+names(air_plltn)
+```
+
+```{r}
+##renaming
+air_plltn2 <- air_plltn %>%
+  rename( AmbientPM_deaths = "Deaths...Ambient.particulate.matter.pollution...Sex..Both...Age..Age.standardized..Rate.", 
+          HH_AP_SF_deaths = "Deaths...Household.air.pollution.from.solid.fuels...Sex..Both...Age..Age.standardized..Rate.", 
+          AmbientO3_deaths= "Deaths...Ambient.ozone.pollution...Sex..Both...Age..Age.standardized..Rate.", 
+          AP_deaths = "Deaths...Air.pollution...Sex..Both...Age..Age.standardized..Rate.")
+```
+
+```{r}
+# make a plot showing the **death rates from indoor air pollution and outdoor air pollution (sum of particulate matter and ozone) over time** . 
+
+##Note that air_plltn2 contains HH_AP_SF_deaths, which represents in the deaths from indoor air pollution. For outdoor air pollution, need to sum deaths from PM 2.5. AP_deaths represents the sum of other column deaths
+
+##create new variable, represent the sum of deaths from outdoor AP
+
+air_plltn2 <- air_plltn2 %>%
+  mutate(outdoorAP_deaths = AmbientPM_deaths + AmbientO3_deaths)
+
+glimpse(air_plltn2)
+
+```
+```{r}
+#Loading in new packages. 
+library(flextable) 
+library(webshot)
+library(VIM)
+
+```
+
+```{r}
+#my two countries
+UK <- "United Kingdom"
+
+IN <- "India"
+
+#filter to UK and IN, select variables, creating two new data frames that contain only the rows corresponding to each of the two countries
+plot_UK <- air_plltn2 %>%
+  filter(Entity %in% c(UK))%>% 
+  select(Entity, Year, HH_AP_SF_deaths, outdoorAP_deaths)
+  
+plot_IN <- air_plltn2 %>%
+  filter(Entity %in% c(IN))%>%
+  select(Entity, Year, HH_AP_SF_deaths, outdoorAP_deaths)
+
+##no need to add new column, I already did that previously 
+
+```
+
+```{r}
+#Hint: you might have to set the y scale manually to make sure your plot is wide enough to show both countries. You can do this using the "ylim" argument in plot. I usually use ggplot though 
+
+#Distinguish the countries using different colored lines and the types of pollution using different line types     
+#Make sure to add a legend and appropriate titles for the axes and plot   
+
+#first attempt: The problem I'm having is that I am setting my colors as fixed strings outside of aes, 
+##always start w ggplot and data, then aes 
+IN_gg <- 
+  ggplot() +
+  geom_line(data=plot_IN, aes(x=Year, y=HH_AP_SF_deaths), color='blue', linetype = "dashed") +
+  geom_line(data=plot_IN, aes(x=Year, y=outdoorAP_deaths), color='blue')+
+  geom_line(data=plot_UK, aes(x=Year, y=HH_AP_SF_deaths), color='red', linetype= "dashed")+
+  geom_line(data=plot_UK, aes(x=Year, y=outdoorAP_deaths), color='red')+
+  labs(x = "Year", y= "Death Rates", color="Legend")
+
+  
+
+IN_gg
+```
+
+```{r}
+#I don't think I can add legend to the code above, so I am going to just combine plot_UK and plot_IN
+
+#making new dataset that combines plot_UK and plot_IN. I am using bind_rows rather that left_join. 
+##Note to self: Bind_rows() is a tidyverse function, specifically from dplyr. It can deal with missing values, whereas base rbind() cannot, and it stacks the observations. I originally tried doing a left_join, but that doesn't work bc it merges datasets.  horizontally. 
+
+##gameplan:label the countries, stack datasets, place in long format 
+
+
+plot_both <- bind_rows(plot_IN %>%
+                         mutate(Country = "India"),
+                       plot_UK %>%
+                         mutate(Country = "United Kingdom"))%>% #allowing for R to map columns via mutate()..needed for legend. Bind() stacks rows> tells r that variables are same but measured for different observations 
+  pivot_longer(cols = c(HH_AP_SF_deaths, outdoorAP_deaths), 
+               names_to = "PollutionType", 
+               values_to = "DeathRate")%>% #pollution type is stored in column names, so using pivot_long() function to place values inside the columns
+  mutate(PollutionType = recode(PollutionType, 
+                                HH_AP_SF_deaths = "Household Air Pollution", 
+                                outdoorAP_deaths = "Outdoor Air Pollution")) #mutate() to make my legend have nicer labels. Recode() replaces values inside column w the presentation ready names
+
+```
+
+```{r}
+#Finally plotting plot_both via ggplot(), following references
+ggplot(plot_both, 
+       aes(x=Year, 
+           y=DeathRate,
+           color = Country, linetype = PollutionType))+ 
+  geom_line(linewidth = 1)+
+  labs(x= "Year", 
+       y= "Death Rates", 
+       color = "Country", linetype = "Pollution type")+
+  scale_color_manual(values = c("India" = 'blue', 
+                                "United Kingdom" = 'orange'))+ 
+  theme_minimal()
+```
+
+
+
+```{r}
+##References 
+###Dr.Noli Brazil's CRD Github pages
+###R studio cheatsheet: https://rstudio.github.io/cheatsheets/data-transformation.pdf 
+
+##random tidyverse sources
+### Combining datasets using dplyr bind & join functions: https://myslu.stlawu.edu/~iramler/stat234/coursenotes/introduction-to-merging-data-tables-in-r.html 
+###https://stackoverflow.com/questions/7570319/the-right-way-to-plot-multiple-y-values-as-separate-lines-with-ggplot2 
+###pivot_longer(): https://tidyr.tidyverse.org/reference/pivot_longer.html 
+###ggplot: https://ggplot2.tidyverse.org/articles/ggplot2.html 
+
+```
+
+
+3. Merge the air pollution data with the gdp data using merge()  
+Merge is a function that combines data across two data frames by matching ID rows  
+By default merge will identify ID rows as those where column names are the same between datasets, but it is safer to specify the columns you want to merge by yourself using "by"  
+In our case, we want to merge both by country (either the "Entity" or "Code" columns) and year columns  
+Note that by default, the merge function keeps only the entries that appear in both data frames - that is fine for this lab. If you need for other applications, you can change using the all.x or all.y arguments to the function - check out the documentation at ?merge
+
+```{r question3}
+##need to merge by country, so entity and year. using Left_join function
+alldata <- left_join(air_plltn2, gdp_gini2, 
+                     by = c(Entity = "Entity", 
+                            Year = "Year"))
+```
+
+
+4. Make a *plot with two subplots* - one showing *a scatter plot between log of per-capita GDP (x axis) and indoor air pollution death rate (y axis)* and *one showing log of per-capita GDP (x axis) and outdoor air pollution (y axis)*  
+Make sure to add appropriate titles to the plots and axes  
+Use ylim to keep the range of the y axis the same between the two plots - this makes it easier for the reader to compare across the two graphs  
+
+STRECTH GOAL CHALLENGE - color the points based on continent. NOT REQUIRED FOR FULL POINTS - a challenge if you want to push yourself - continent info is included in the GDP dataset, but it is only listed for the year 2015  
+If you are trying this and getting stuck ASK FOR HELP - there are some tips and tricks for making it easier   
+
+```{r question4}
+#asking for two subplots, meaning side-by-side plots. Make sure to add appropriate titles to the plots and axes  
+##1. scatter plot between log of per-capita GDP (x axis) and indoor air pollution death rate (y axis)\
+##2. log of per-capita GDP (x axis) and outdoor air pollution (y axis)
+
+
+###ggplot2 already loaded via tidyverse
+
+###Okay, if I remember correctly, ylim() will drop data that's outside the defined limit. Range() is alternative to compute limits 
+```
+
+```{r}
+#gathering what I am going to plot
+plot_together <- alldata %>%
+  select(RealGDP, HH_AP_SF_deaths, outdoorAP_deaths) %>% #selecting variables
+  pivot_longer(cols = c(HH_AP_SF_deaths, outdoorAP_deaths),
+               names_to = "Type", 
+               values_to = "DeathRate") %>% #making indoor and outdoor into rows, rather than columns.
+  mutate(Type = recode(Type,
+                       HH_AP_SF_deaths = "Indoor air pollution",
+                       outdoorAP_deaths = "Outdoor air pollution")) # improving aesthetics via labels 
+
+
+#y-axis scale
+y_lim <- range(plot_together$DeathRate, na.rm = TRUE)
+
+#plotting via ggplot()
+ggplot(plot_together,
+       aes(x = log(RealGDP),
+           y = DeathRate))+
+  geom_point(alpha = 0.5)+ #scatterplot+transparency
+  facet_wrap(~Type, nrow = 1)+ #instructing R to make one plot per pollution type
+  coord_cartesian(ylim = y_lim)+
+  labs(x = "log(Per-capita GDP)", y = "Death Rate")+
+  theme_minimal()
+
+#References 
+##Brazil github lab 4 (primary reference) : https://crd150.github.io/lab4.html 
+##on ylim: https://stackoverflow.com/questions/23050927/r-language-how-to-set-ylim#:~:text=2%20Answers,12.8k7%2057%2078 
+## Combining ggplots: https://www.google.com/url?sa=t&source=web&rct=j&opi=89978449&url=https://www.youtube.com/watch%3Fv%3DraLFv54gAzg&ved=2ahUKEwiw6OO-nauSAxXsJTQIHdGnOJoQkPEHegQIGBAB&usg=AOvVaw1ma_o8ZGx4XiJDswbjR-VS 
+```
+
+
+
+5. Submission: Upload your Rmarkdown document and knitted PDF document to Canvas. Add your Rmarkdown file to your Github repository, commit your changes and push to your online repository (as we did Wednesday or last week)
+
