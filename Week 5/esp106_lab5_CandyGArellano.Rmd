@@ -1,0 +1,164 @@
+---
+title: "Lab 5"
+name: Candy G. Arellano
+date: 02/09/2004
+output: pdf_document
+---
+
+```{r setup, echo=FALSE}
+require("knitr")
+#opts_knit$set(root.dir = ) #use this to set your working directory so knitr understands it. By default the working directory is the same folder as where this Rmd document is saved on your computer
+```
+
+## Lab 5
+
+### Due Tuesday Feb4th - Recommended to complete this before starting the midterm
+
+This lab we will look at some data from the plastic trash piced up during clean-up events around the world. I took this dataset from the Tidy Tuesday website. You can read the documentation [here](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-01-26/readme.md), including the references and description of the different column names.
+
+I have done some pre-processing of the data for you for this lab, to create two more easy-to-use dataframes.
+
+First read in the countrytotals.csv data frame
+```{r echo=FALSE}
+#loading in tidyverse 
+library(tidyverse)
+#read_csv rather than read.csv bc I like that read_csv uses tibble format & doesn't convert strings into factors 
+countrytotals <- read_csv("~/Downloads/ESP_106/ESP 106/esp106_CandyGArellano/Week 5/countrytotals.csv")
+
+```
+
+Have a look at the data frame. Then column "total" gives the total number of pieces of plastic picked up in that country in 2020. The columns "num_events" and "volunteers" give the number of trash pick-up events and the number of volunteers in that country. We are going to use this to investigate where the plastic trash problem is worst.
+
+```{r}
+#look at data frame
+glimpse(countrytotals)
+```
+
+
+1. What 5 countries had the worst plastic problem as measured by the number of pieces of trash picked up?
+
+```{r question 1, echo=FALSE}
+
+#hint order(datacolumn, decreasing=TRUE) will give you the ranking of the countries by the values in the data column
+#you can use this to re-order the country data frame, ordering it from the country with the most trash picked up to the least
+
+
+worst_5 <- order(countrytotals$total, decreasing = TRUE) #reordering via base R 
+countrytotals[worst_5, ] [1:5, ] #for reordered column worst_5, filter return rows 1:5 
+
+```
+
+**Answer: Nigeria, Philippines, Switzerland, India, Togo ** 
+
+2. Make a plot showing the distribution of volunteers across countries
+
+```{r question2, echo=FALSE}
+options(scipen = 999) # eliminate scientific notation
+
+#plot w logarithmic distribution of volunteers 
+volunteer_distribution_log <- ggplot(countrytotals, aes(y = volunteers))+
+  geom_boxplot()+
+  scale_y_log10()+ #my scale was looking very squished together. used a logarithmic scale for presentation
+  theme_minimal()+
+  labs(title = "Distribution of Volunteers Across Countries (logrithmic)",
+       y = "Volunteers (log scale)",
+       x = NULL)
+
+volunteer_distribution_log
+
+```
+
+```{r}
+#non logarithmic distribution 
+volunteer_distribution <- ggplot(countrytotals, aes(y = volunteers))+
+  geom_boxplot()+
+  theme_minimal()+
+  labs(title = "Distribution of Volunteers Across Countries",
+       y = "Volunteers",
+       x = NULL)
+
+volunteer_distribution
+```
+
+```{r}
+#references 
+##1) https://rpubs.com/techanswers88/remove-scientific-notation-in-ggplot 
+##2)https://www.r-bloggers.com/2021/08/beginning-a-ggplot2-series-logarithmize-your-scales/ 
+
+```
+
+3. Notice that there is a lot of variation across countries in the number of volunteers involved in trash pickup. What problem might that cause for the interpretation of your answer to question 1?
+
+**Answer: Question 1 identifies the countries with the worst plastic problem by how many pieces of trash are picked up. The problem is that this variable (pieces of trash picked up) may depend on how many people pick up trash and not necessarily reflect the amount of trash actually present in said country. For example, if country X has high amounts of plastic and low amount of volunteers, then there may be small total of pieces picked up. If another country, say Country Y, has low amounts of plastic and high amount of volunteer, then there may be a high total of pieces picked up. **
+
+4. Add a column to the data frame creating a variable that should be more closely related to the presence of plastic pollution in the country
+
+```{r question4, echo=FALSE}
+#column names are basicaly different types of plastic. Total is total pieces of trash picked up. 
+#so best way might be to do ratio of total plastic over the number of volunteers 
+countrytotals <- countrytotals %>%
+  mutate(trashpervolunteer = total / volunteers)
+
+```
+
+
+5. What 5 countries have the worst plastic pollution, as measured by this new variable?
+
+```{r question5, echo=FALSE}
+worst_5_trashpervolunteer <- order(countrytotals$trashpervolunteer, decreasing = TRUE)
+countrytotals[worst_5_trashpervolunteer,] [1:5,]
+
+```
+
+**Answer: Togo, El Salvador, Japan, Kuwait, Germany** 
+
+Now we will make a plot of the variation in the types of trash and how it differs around the world. Read in the continenttypes.csv data frame. This gives the breakdown of the different types of plastic collected on each continet in 2020 and the total number of pick up events.
+
+```{r echo=FALSE}
+#reading in continenttypes.csv 
+
+continenttypes <- read_csv("~/Downloads/ESP_106/ESP 106/esp106_CandyGArellano/Week 5/continenttypes.csv")
+
+```
+```{r}
+#viewing data frame
+glimpse(continenttypes)
+```
+6. Add a column to this data frame with a variable that captures the existence of different types of plastic trash, controlling for the intensity of the pick-up effort in different continent
+
+```{r question6, echo=FALSE}
+#numeric variable, summarize existence of diff plastic types, adjust for differences in collection efforts. how would I control for intensity >> First I might rename the "total" columns in each dataset, given "total" represents two different things for each data set. And then  I need to left_join and add in the amount of volunteers? then I need to filter for wanted columns, mutate variable where divide the total type of diff plastic types by the # of volunteers . 
+
+continenttypes <- continenttypes %>%
+  group_by(continent) %>% #grouping by continent 
+  mutate(types_present = n_distinct(plastic_type [total>0]),# n_distinct() counts how many types of plastic exist w/in each category
+         types_per_event = types_present / first(events))%>%#per cleanuup event, controlling for intensity of pick-up effort
+  ungroup()
+
+glimpse(continenttypes)
+
+
+```
+
+7. Make a plot using ggplot showing both the total amount and distribution of types of plastic picked up in each continent in the average pick-up event.
+
+Hint: Check out options in the [R graph gallery](https://www.r-graph-gallery.com)
+
+```{r question7, echo=FALSE}
+plastic_continent_distribution <- 
+  ggplot(continenttypes, aes(x = continent, y = total, fill = plastic_type))+
+  geom_col()+ #bar chart 
+  labs(title = "Distribution of Plastic Types Picked Up: By Continent",
+                x = "Continent",
+                y = "Total Collected",
+       fill = "Plastic Type")+
+  theme_minimal()
+
+plastic_continent_distribution
+
+#References: https://ggplot2.tidyverse.org/reference/geom_bar.html 
+
+```
+
+8. Try uploading your R markdown file and plots to your Git Hub repository. Upload your Rmd and knitted PDF to Canvas
+
