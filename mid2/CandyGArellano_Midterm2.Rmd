@@ -1,0 +1,225 @@
+---
+title: "Midterm 2"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+name: Candy G Arellano
+---
+
+### Data 
+
+For this midterm you need to use two datasets:
+
+"chinalanduse_MODIS_2012.nc" contains four layers of raster data representing land cover for China. The data were derived from MODIS satellite data for the year 2012. The layers give the fraction of each cell that has a specific land cover type: urban (layer 1), cropland (layer 2), grassland (layer 3) and forest (layer 4). 
+
+"ch_adm.*" with polygons for the provinces of China.
+
+```{r}
+#read in packages I like 
+library(terra)
+library(tidyverse) #contains ggplot2 
+```
+
+
+Q1. Read in the land use data as a SpatRaster get the polygons as a SpatVector (2 points)
+
+
+```{r}
+#land use data as SpatRaster 
+China_LandUse <- rast("~/Downloads/ESP_106/ESP 106/esp106_CandyGArellano/mid2/chinalanduse_MODIS_2012.nc")
+
+#polygon as SpatVector 
+
+China_Provinces <- vect("~/Downloads/ESP_106/ESP 106/esp106_CandyGArellano/mid2/chn_adm.shp")
+
+
+```
+
+
+Q2a. Crop the land use SpatRaster to the same extent as the SpatVector of Chinese provinces (1 point), and set all raster cells outside of China to `NA`
+
+```{r}
+#check extent > extent does not match 
+ext(China_LandUse)
+
+ext(China_Provinces)
+
+#check CRS > CRS matches on both! 
+crs(China_LandUse)
+
+crs(China_Provinces)
+
+```
+
+```{r}
+#crop raster (China_LandUse) to vector (China_Provinces) > use crop()
+China_LandUse <- crop(China_LandUse, China_Provinces)
+
+#set all raster cells outside of China to 'NA' > use mask()
+China_LandUse <- mask(China_LandUse, China_Provinces)
+```
+
+```{r}
+#results 
+ext(China_LandUse)
+ext(China_Provinces)
+```
+
+
+Q2b. Rename the layers in the SpatRaster so they provide information about what data is in each of the 4 layers (2 points)
+
+```{r}
+#look at layer names 
+names(China_LandUse)
+
+#"The layers give the fraction of each cell that has a specific land cover type: urban (layer 1), cropland (layer 2), grassland (layer 3) and forest (layer 4)."
+
+#more info on names 
+?terra::names
+
+names(China_LandUse) <- c("urban", "cropland", "grassland", "forest")
+
+names(China_LandUse)
+```
+
+Q2c. Make a figure showing each SpatRaster layer on one of the panels and overlay the polygons of the Chinese provinces. Title each panel with the type of land use it shows. 
+```{r}
+par(mfrow = c(2,2))  #create four panels and then plot each land use
+
+plot(China_LandUse[[1]], main = "Urban")
+lines(China_Provinces)
+
+plot(China_LandUse[[2]], main = "Cropland")
+lines(China_Provinces)
+
+plot(China_LandUse[[3]], main = "Grassland")
+lines(China_Provinces)
+
+plot(China_LandUse[[4]], main = "Forest")
+lines(China_Provinces)
+```
+
+```{r}
+#note: Initially, I tried doing a wrap function and add a red color to my polygons, but my laptop kept crashing. I tried to use the most basic plotting I could think of. 
+```
+
+Q4a. Use `terra::extract` to find, for each province, the fraction of land in these four classes. [For this question you can assume all the cells have the same size] (3 points)
+
+```{r}
+# 4a: province-level fractions (same cell size assumption)
+fraction <- terra::extract(China_LandUse, China_Provinces, fun = mean, na.rm = TRUE)
+
+fraction
+```
+
+Q4b. Describe the potential problem with the area assumption made in 4a. How might it affect the calculation in that step? What could we do if we didn't want to make that assumption? (You don't have to do it, just describe in theory) (2 points)
+
+**Answer:4a is assuming that the area has equal projection, but that is not true. Our data is in latitude/longitude, so the cell area is going to change depending where X province is on the latitude lines. For example, provinces that are higher north might have smaller cells that will be treated the same as larger cells when calculating some statistics like the mean. We could solve this by putting the data into an equal-area projection like an Albers Equal Area Conic**
+
+
+Q4c. Sum up the fractions in the four land cover classes for each province and plot these as a histogram. (2 points) 
+
+```{r}
+?`rowSums,SpatRaster-method` #sum values of SpatRaster layer
+
+#sum fractions
+sum_frac <- rowSums(fraction[, c("urban", "cropland", "grassland", "forest")], na.rm = TRUE)
+
+#reset to single plot 
+par(mfrow = c(1,1))
+
+#histogram
+hist(sum_frac,
+     main = "China: sum of land-cover fractions",
+     xlab = "urban + cropland + grassland + forest",
+     breaks = 10)
+
+#Note to self: Histogram shows how many provinces fall into each bin. Can see that my histogram isn't really skewed strongly to one side, but has bimodal dist. 
+```
+
+Q5. Add a new variable called "other" to the data.frame created with terra::extract. This variable should represent the fraction of all other land cover classes. Assign it the appropriate values. (2 points)
+
+```{r}
+#subtract four land cover classes we focused on above 
+fraction$other <- 1 - rowSums(fraction[, c("urban", "cropland", "grassland", "forest")],
+                     na.rm = TRUE)
+
+```
+
+
+Q6. Make barplots showing the breakdown of urban, cropland, grassland, forest, and other for each province. The barplots should be "stacked" (a single bar for each province, showing land cover with a color) and "horizontal" (province names on the vertical axis).  
+
+Q6a) Use graphics::barplot, make sure to include a legend.  (4 points)
+
+```{r}
+#stacked bars = make a matrix
+land_matrix <- as.matrix(fraction[, c("urban", "cropland", "grassland", "forest", "other")])
+
+land_matrix <- t(land_matrix) 
+```
+
+```{r}
+#get province names
+names(China_Provinces)
+
+prov_names <- China_Provinces$NAME_1
+
+```
+
+```{r}
+#plot! 
+barplot(land_matrix,
+        horiz = TRUE,
+        col = c("brown","yellow","lightgreen","darkgreen","lightgrey"),
+        legend.text = rownames(land_matrix),
+        names.arg = prov_names,
+        las = 1,
+        cex.names = 0.6,
+        main = "Land Cover by Province",
+        xlab = "Fraction",
+        ylab = "Province")
+```
+
+Q6b) Use ggplot. (4 points) 
+
+```{r}
+#loaded in via tidyverse 
+
+#long format for tidy workflow 
+df_frac <- pivot_longer(fraction,
+                        cols = c("urban","cropland","grassland","forest","other"),
+                        names_to = "land_type", values_to = "fraction")
+glimpse(df_frac) #noting there is no province column
+
+#need to match ID col to provinces 
+df_frac$Province <- China_Provinces$NAME_1[df_frac$ID]
+```
+
+
+
+```{r}
+#plot in gg 
+ggplot(df_frac, 
+       aes(x = Province, y = fraction, fill = land_type)) +
+  geom_bar(stat = "identity") +
+  coord_flip() + #for vertical stacking
+  labs(title = "Land Cover by Province",
+       x = "Province",
+       y = "Fraction",
+       fill = "Land Type") +
+  theme_minimal()
+```
+
+```{r}
+#References
+##https://hbctraining.github.io/Intro-to-R/lessons/basic_plots_in_r.html 
+
+##https://ggplot2.tidyverse.org/
+
+##https://rspatial.github.io/terra/
+
+##CRD 150 Github 
+```
+
+Q7. Upload your R markdown file, and your knitted output to Canvas (2 points)
+
