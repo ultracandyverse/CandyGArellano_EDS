@@ -1,0 +1,1030 @@
+---
+title: "FinalProject"
+author: "Candy"
+date: "2026-03-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Research Question and Background 
+
+## Research Question
+Do census tracts with more waste sites tend to have worse health outcomes?
+## Background 
+Environmental justice in the United States has long been connected to waste management and the siting of waste facilities. One of the earliest events that helped spark the environmental justice movement occurred in Warren County, North Carolina in the 1980s, when residents protested the dumping of polychlorinated biphenyls (PCBs) in a nearby hazardous waste landfill (Rector, 2018). Since then, the location of waste facilities has remained a concern in environmental justice discussions and research. These concerns are still relevant today, including in California, where waste production continues to increase and communities often question the impacts of living near waste sites.
+
+Solid waste is defined as “all solid or semi-solid waste… mostly includ[ing] domestic or household waste" (Siddiqua et al., 2022, p.58518). Placing waste sites near residential areas can create environmental risks such as methane accumulation, groundwater contamination, and property damage (Siddiqua et al., 2022). Waste facilities can also generate pollutants that affect nearby communities. When organic materials like food waste decompose in landfills, they produce byproducts such as leachate and landfill gas (Chen et al., 2021). Leachate forms when rainwater mixes with decomposing waste and can contain contaminants such as ammonia and microbes (ACTenviro, 2025). If not properly contained, this liquid can seep into surrounding soil or groundwater.
+
+Landfill decomposition also produces landfill gas. Because landfills are mostly anaerobic environments, microorganisms break down organic waste and release methane and carbon dioxide. Methane contributes to greenhouse gas emissions and can also lead to the formation of tropospheric ozone, which is known to aggravate lung diseases and may contribute to asthma development (EPA, 2025b). In addition, landfill emissions can produce strong odors that affect nearby residents. For example, some landfill facilities in Los Angeles have generated thousands of odor complaints from surrounding communities (South Coast AQMD, 2025). Although some studies have found links between waste facilities and health impacts (Siddiqua et al., 2022), many focus on individual sites rather than broader regional patterns. Fewer studies look at the spatial relationship between waste facility locations and population health indicators across larger areas in California. This project examines that relationship by exploring whether communities located closer to waste facilities experience worse health outcomes.
+
+
+# Materials and Methods 
+Here is a brief overview of my exploratory data analysis process, beginning with data selection.
+
+## Datasets Used 
+
+**Health Data**
+
+To ensure spatial consistency across datasets, this analysis focuses on health indicators available at the census tract level. Many health datasets are only available at the county level, which makes them difficult to integrate with tract-level environmental data. As a result, several potential indicators were excluded from the analysis. For example, birth-related indicators such as preterm births and birthweight were not included because tract-level data were not available for the same time period.
+
+The health indicators used in this study come from CDC PLACES and were accessed through PolicyMap. For more information about PolicyMap, go here: [https://unl.libguides.com/policymap]. 
+
+The following health indicators were selected:
+Asthma: Estimated prevalence of current asthma among adults aged 18 or older in 2023 (crude percent). Source: CDC PLACES
+Cancer: Estimated prevalence of cancer (excluding skin cancer) among adults aged 18 or older in 2023. Source: CDC PLACES
+Chronic Obstructive Pulmonary Disease (COPD): Estimated prevalence of COPD among adults aged 18 or older in 2023 (crude percent). Source: CDC PLACES
+
+
+**Waste Site and Facility Data**
+Waste site location data were obtained from the CalRecycle Solid Waste Information System (SWIS) database.
+
+I only filtered out an extreme outlier site and facilities categorized as planned. I chose to keep both active and closed waste facilities because I was interested in historical land use and how past waste management activities might still affect surrounding communities. Even if a site is no longer active, previous waste handling practices may have left lasting environmental impacts. By including these sites, the analysis aims to capture a broader picture of how both current and historical waste infrastructure may relate to present-day health outcomes.
+
+**Demographic Data** 
+Demographic variables were obtained using the tidycensus API, which provides access to U.S. Census Bureau data within R. This analysis uses the American Community Survey (ACS) 5-year estimates, which are the standard for census tract–level analysis. The ACS 1-year estimates were not used because they are not available for census tracts.
+
+# Exploratory Data Analysis
+This exploratory data analysis explores the relationship between waste sites and prevalence of health issues. It begins by cleaning and joining the data sets. Then it analyzes the linear relationships between variables. Finally, it runs regressions and analyzes the significance of associated relationships. 
+
+## Import data 
+
+**set working directory**
+
+```{r}
+# set working directory 
+
+setwd("~/RStudio/ESP106_Final")
+
+getwd()  
+
+```
+
+**load tidyverse package:: readr**
+This package contains read_csv(), which produces a tibble format and does not automatically convert strings to factors 
+```{r}
+library(readr)
+```
+
+**import health data**
+When extracting data through PolicyMap, export crude percentages for the year 2022.  
+```{r}
+# [2022 Health Estimates]
+
+# Prevalence of Cancer (except skin) by Census Tract, 2022 as of 2023 in California (State)
+Cancer <- read_csv("CDC_Places_Cancer.csv")
+
+# Prevalence of Asthma by Census tract, 2022 as of 2023 in California (State)
+Asthma <- read_csv("CDC_Places_Asthma.csv")
+
+# Prevalence of COPD by Census Tract, 2022 as of 2023 in California (State)
+COPD <- read_csv("CDC_Places_COPD.csv")
+
+```
+**import waste site and facility data**
+Waste site and facility location data come from CalRecycle. 
+[https://www2.calrecycle.ca.gov/SolidWaste/Site/Search].
+To obtain the same data, click on "SWIS Facility/Site Data Exports." Under "Site Data Export," toggle "Site". Under Data format, toggle "Excel (.csv)." 
+
+Keep in mind that CalRecycle does not offer year-by-year datasets, meaning that the SWIS Facility/Site Data is likely updated on a regular basis and will likely look different if exporting a year from now. To improve this analysis' reproducability, I have provided a copy of the dataset I am using on my GitHub here: [INSERT LINK]. 
+
+
+```{r}
+# When reading in the CalRecycle .csv, I get an error when using either read_csv or read.csv. The following code is my troubleshooting. 
+
+## Look for weird character or nulls
+readLines("Sites.csv", n = 5)
+
+## The CalRecycle website describes exports as "Export to Excel", meaning that the csv is an Excel-Style CSV instead of a UTF-8 CSV. 
+```
+
+```{r}
+# Read csv using base r read.csv(). fileEncoding specifies how text in the file is encoded 
+sites <- read.csv("Sites.csv", fileEncoding = "UTF-16LE")
+```
+
+**import demographic data**
+  
+Although it possible to import this data from PolicyMap and other avenues, the Census API allows you to retrieve data using only a few lines of code. 
+
+In order to access Census data using the Census API, use the tidycensus package. If you do not have an API key yet, please request one here: [https://api.census.gov/data/key_signup.html]. Note that only one API key is available per email address. 
+
+```{r}
+# load tidycensus package 
+library(tidycensus)
+```
+
+```{r}
+# identify needed variable IDs from 5-year ACS. 
+
+## v23 is a record layout of the 2019-2023 ACS. 
+
+v23 <- load_variables(2023, "acs5", cache = TRUE)
+
+#View(v23)
+```
+
+```{r}
+# extract demographic estimates for Census tracts in California
+ca <- get_acs(geography = "tract",
+              year = 2022, #the health datasets show GeoVintage = 2022, meaning census tracts boundaries are the 2022 version. 
+              variables = c(tpopr = "B03002_001", # Total Population
+                            age = "B01002_001", # Median Age by Sex
+                            white = "B03002_003", # White Population 
+                            blk = "B03002_004", # Black Population
+                            asian = "B03002_006", # Asian Population
+                            hisp = "B03002_012"), # Hispanic Population
+              state = "CA",
+              survey = "acs5",
+              output = "wide")
+
+## Sometimes, I get an API server hiccup. If a Error in curl::cuurl_fetch_memory.. appears, simply reinstall the Census API key using the following: census_api_key("FILL_API_HERE", install = TRUE). 
+```
+
+
+
+## Data Wrangling
+
+### Examine data 
+
+**re-examine source data** 
+
+Any datasets extracted using PolicyMap come with a metadata file. CalRecycle's dataset does not. Examine all metadata files and CalRecycle's website. Take notes on differences, definitions, etc.
+
+- CDC_Places_Asthma.csv
+  - p_crd_casthma represents "Estimated prevalence of current asthma among adults aged 18 or older in 2023."
+
+- CDC_Places_Cancer.csv 
+  - p_crd_cancer represents "Estimated prevalence of cancer (excluding skin cancer) among adults aged 18 or older in 2023."
+  
+- CDC_Places_COPD.csv 
+  - p_crd_copd represents "Estimated prevalence of chronic obstructive pulmonary disease among adults aged 18 or older in 2023."
+  
+- Site.csv 
+  - Metadata avaliable here: [https://www.arcgis.com/home/item.html?id=f96a4878acf644d4923756bcf2ec90cb]. 
+  - Geography in longitude/latitude format 
+  - No GEOID
+- Census data 
+  - Compatible with CDC_Places
+  
+In order to match SWIS point data to demographic+ health data, a spatial join is needed. 
+
+
+```{r}
+# load the dplyr package, which hosts the useful glimpse() function
+library(dplyr)
+```
+
+preview data using the glimpse() function or View(). 
+
+All health indicator data sets will have the same columns + their respective health indicator column. The SWIS data looks a little bit different, with various unique variables-- some of which are not needed. Like the ca data, this set contains a "NAME" column, but it represents the sites name rather than the Census tract name. 
+
+```{r}
+# waste site and facility data 
+glimpse(sites)
+```
+
+summary stats, outliers, NA's 
+```{r}
+summary(ca)
+
+## The age columns contain NA values. 
+```
+
+
+All Census data and CDC_Places data is tract level. The site dataset is a little bit more complicated, offering point data through two longitude and latitude columns. 
+  - Census: 2023
+  - CRD_Places: 2023 
+  - CalRecycle: Copyrighted 2026, no way to know when sites were added. However, the Site.Operational.Status column lists sites that are planning, meaning that they yet begun operations and cannot currently accept waste. I will be removing these sites out of the dataset. 
+  
+  
+
+### Clean Data Sets + Merge 
+
+```{r}
+# Asthma, Cancer, COPD, PM25, and ca all share Census GEOID (Geographic identifier) columns.
+
+# Use select() function from dplyr package to select needed columns from each health dataset. In this case, only keep the "GeoID" and the health indicator columns in each set. Rename "GeoID" columns to "GEOID". Convert health variables to numeric, rather that character (for future plotting).
+
+Asthma_C <- Asthma %>%
+  select(GeoID, p_crd_casthma) %>%
+  rename(GEOID = GeoID, Asthma = p_crd_casthma) %>%
+  mutate(Asthma = as.numeric(Asthma))
+
+Cancer_C <- Cancer %>%
+  select(GeoID, p_crd_cancer) %>%
+  rename(GEOID = GeoID,Cancer = p_crd_cancer)%>%
+  mutate(Cancer = as.numeric(Cancer))
+
+COPD_C <- COPD %>% 
+  select(GeoID, p_crd_copd) %>%
+  rename(GEOID = GeoID, COPD = p_crd_copd) %>%
+  mutate(COPD = as.numeric(COPD))
+
+
+# When converting the health indicators to numeric, the following warning appears: "NAS introduced by coercion". The following code uses the unique() function on the original Asthma data to see what values appear in the p_crd_casthma column-- removing duplicates. 
+
+unique(Asthma$p_crd_casthma)
+
+## Previously, I used sum(is.na(data$column)) to identify missing values. However, this function doesn't look for text such as N/A. Converting to numeric doesn't actually introduce new NA values. It's just forcing the "N/A" strings to convert into real NA values. 
+
+```
+
+```{r}
+# Clean California demographic data 
+ca <- ca %>%
+  mutate(pct_white = 100 * whiteE / tpoprE, # convert estimates into percentages
+         pct_black = 100 * blkE / tpoprE,
+         pct_asian = 100 * asianE / tpoprE,
+         pct_hisp = 100 * hispE / tpoprE) %>%
+  select(GEOID, NAME, tpoprE, ageE, pct_white, pct_black, pct_asian, pct_hisp) %>% # kept, GEOID, NAME, total population, and percentages
+  rename(Tract_Name = NAME) #rename NAME to Tract_Name
+  
+```
+
+```{r}
+# Merge the following: Asthma_C, Cancer_C, COPD_C, PM25_C, ca. Use the "GEOID" column as the key.
+indicator_dem_data <- Asthma_C %>%
+  select(GEOID, Asthma) %>%
+  left_join(Cancer_C %>% 
+              select(GEOID, Cancer), by="GEOID") %>%
+  left_join(COPD_C %>%
+              select(GEOID, COPD), by="GEOID") %>%
+  left_join(ca %>%
+              select(GEOID, Tract_Name, tpoprE, ageE, pct_white, pct_black, pct_asian, pct_hisp), by="GEOID")
+```
+
+
+```{r}
+# clean waste site data. 
+
+## keep columns that help locate the site spatially, identify the site, determine sites status (to clean out planned sites), type of waste facility 
+
+sites_C <- sites %>%
+  filter(Site.Operational.Status != "Planned") %>%
+  select(SWIS.Number, # unique site identifier 
+         Name, # site name, need to rename
+         Latitude, # coordinates
+         Longitude,
+         Site.Operational.Status, # operational status: closed, opened , planned. Will need to exclude planned sites from the analysis, because they have not yet begun accepting waste or may not even exist.
+         Site.Regulatory.Status, # regulatory status: permitted, permitted, etc. 
+         ClosedIllegalAbandonedCategory, # waste category, may be useful for classifying sites by risk sites or exploring questions like "Do sites correlated with X variable tend to be abandoned?" 
+         County # will be cool to explore
+         )%>%
+  rename(Site.Name = Name)
+
+```
+
+```{r}
+# Remove df that are no longer need, just to keep environment clean
+
+rm(Asthma, Asthma_C, Cancer, Cancer_C, ca, COPD, COPD_C, sites, v23)
+
+# now I am left with two clean datasets: indicator_dem_data & sites_C
+```
+
+### Spatial Join
+indicator_dem_data uses GEOID to match data to census tracts. sites_C uses coordinates. A spatial join is needed in order to determine which sites fall in which census tracts. Ultimately, the goal is to calculate the number of sites per tract. 
+
+
+
+Since I am working with vector data, I am going to use the sf package. Learn more about it here: [https://r-spatial.github.io/sf/]. 
+
+```{r}
+library(sf)
+```
+convert data frames into spatial objects
+```{r}
+# convert sites to spatial points using the st_as_sf() function, which will turn the standard data frame sites_C into a spatial object. 
+
+sites_sf <- st_as_sf(sites_C, 
+                     coords = c("Longitude", "Latitude"),
+                     crs = 4326 #CalRecycle never specifies what CRS they use. Assume they are using WGS84 
+                     )
+```
+
+```{r}
+# obtain geometry for indicator_dem_data, which is currently listed as a tbl/ data.frame, meaning there is no spatial geometry. 
+class(indicator_dem_data)
+
+```
+
+In order to add geometry, the tigris package is needed. tigirs allows users to access U.S. Census Bureau geography shapefiles. Learn more about it here: [https://www.rdocumentation.org/packages/tigris/versions/2.2.1]
+
+```{r}
+library(tigris)
+```
+obtain tract geometry 
+```{r}
+# Get census tract boundaries using tigris function tracts() 
+tracts <- tracts(state = "CA", 
+                 year = 2022)
+
+# tract GeoId's are matched to polygons
+glimpse(tracts)
+```
+
+```{r}
+# Join indicator_dem_data to tracts
+tracts_sf <- tracts %>%
+  select(GEOID, geometry) %>%
+  left_join(indicator_dem_data, by = "GEOID")
+
+# clean environment 
+rm(tracts, sites_C, indicator_dem_data)
+```
+
+```{r}
+# Align coordinate systems 
+
+## check CRS 
+st_crs(sites_sf)
+
+st_crs(tracts_sf)
+
+## different CRS, need to match sites_sf to tracts_sf
+sites_sf <- st_transform(sites_sf, st_crs(tracts_sf))
+```
+Conduct a spatial join to find the number of sites per tract 
+```{r}
+
+## Spatial object will contain all health waste site data in one. There will be multiple rows per census tracts. 
+## NOTE: sites_sf geometry is made of points. tracts_sf is made of polygons. The following code matches points to the polygons that contain them. 
+
+sites_with_tract <- st_join(sites_sf, tracts_sf)
+```
+
+```{r}
+# number of sites per tract 
+
+site_counts <- sites_with_tract %>%
+  st_drop_geometry()%>% #not needed
+  group_by(GEOID) %>%
+  summarise(waste_sites = n()) 
+
+# every census tract is now matched to a # of waste sites. 
+glimpse(site_counts)
+```
+
+```{r}
+# join site counts into tracts_sf, which will be the primary data anlaysis set 
+
+tracts_sf <- tracts_sf %>%
+  left_join(site_counts, by="GEOID")
+```
+
+```{r}
+# results 
+glimpse(tracts_sf)
+
+``` 
+
+```{r}
+# many rows have NA values under waste_sites.
+summary(tracts_sf) # The minimum is listed as 1 under waste_sites column-- meaning that rows with NA values represent tracts with 0 waste sites. 
+
+# Note that there other columns contain NA values as well. Together, NA values represent less than 1% of data. 
+
+```
+
+```{r}
+library(tidyr) ##offers the replace_na() function
+
+# you can also replace NA values using base R. 
+```
+
+```{r}
+# clean tracts_sf, and create logarithmic site group categories
+tracts_sf <- tracts_sf %>%
+  mutate(waste_sites = replace_na(waste_sites, 0), # NA's here represent 0 waste sites
+         waste_sites = as.numeric(waste_sites), # waste_sites should be numeric
+         site_group = floor(log2(waste_sites+1))) # group # of waste sites in log bins
+
+```
+
+```{r}
+# view site group bins 
+tracts_sf %>%
+  st_drop_geometry() %>%
+  group_by(site_group) %>%
+  summarise(min_sites = min(waste_sites),
+            max_sites = max(waste_sites),
+            n_tracts = n())
+
+# based on the log bins, create labels 
+
+tracts_sf <- tracts_sf %>%
+  mutate(site_group_label = case_when(site_group == 0 ~ "0",
+                                      site_group == 1 ~ "1-2",
+                                      site_group == 2 ~ "3-6",
+                                      site_group == 3 ~ "7-14",
+                                      site_group == 4 ~ "15-30",
+                                      site_group >= 5 ~ "31+"))
+
+summary(tracts_sf) # Note that there other columns contain NA values as well. Together, NA values represent less than 1% of data.
+```
+
+
+
+
+
+```{r}
+# create cleaned analysis dataset for statistical analysis
+tracts_sf_clean <- tracts_sf %>%
+  drop_na(Asthma, COPD, ageE, pct_white, pct_black, pct_asian, pct_hisp) %>% #remove tracts with missing values on key analysis variables 
+  filter(tpoprE > 0) # only include tracts where the population is above 0. 
+
+```
+
+
+## Data Analysis 
+
+My primary research question is: Do tracts with more waste sites experience worse health outcomes or higher pollution exposure? 
+
+
+### Examine variable distribution
+The analysis will begin by examining variables and their distributions. With over 9000 census tracts, plots need to handle large N well, show skew + outliers, and be easy to interpret. 
+
+**Descriptive Statistics** 
+Summarize key variables from tracts_sf_clean to see central tendency, skew, and variability. 
+
+  For exposure, examine waste_sites and log_waste_sites. 
+  For health outcomes, examine asthma, COPD, Cancer 
+  For demographics, examine ageE, pct_white, pct_asian, pct_hisp. 
+  
+Load the flextable package, which helps make neat tables. For more information, please refer to : [https://epirhandbook.com/en/new_pages/tables_presentation.html]
+
+```{r}
+library(flextable)
+```
+create statistics tables
+
+```{r}
+#prepare df for a summary statistics table 
+summary_table <- tracts_sf_clean %>%
+  st_drop_geometry() %>% # geometry not needed 
+  select(waste_sites, Asthma, COPD, Cancer, ageE, pct_white, pct_black, pct_asian, pct_hisp)
+
+# group variables, and take the summary statistics
+summary_table <- summary_table %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Value") %>%
+  group_by(Variable) %>%
+  summarise(Mean = mean(Value, na.rm = TRUE), 
+            Median = median(Value, na.rm = TRUE),
+            SD = sd(Value, na.rm = TRUE),
+            IQR = IQR(Value, na.rm = TRUE)) %>%
+  mutate(across(c(Mean, Median, SD, IQR), round, 2)) %>%
+  mutate(Variable = recode(Variable,
+                     waste_sites = "Waste Sites",
+                     Asthma = "Asthma Prevanlence (%) ",
+                     COPD = "COPD Prevalence (%)",
+                     Cancer = "Cancer Prevalence (%)",
+                     ageE = "Median Age",
+                     pct_white = "% White",
+                     pct_black = "% Black",
+                     pct_asian = "% Asian",
+                     pct_hisp = "% Hispanic"))
+
+# final table
+flextable(summary_table) %>%
+  autofit() %>%
+  align(align = "center", part = "all") %>%
+  theme_apa()
+
+```
+Based on the table, there are a few takeaways. Waste facility counts are right-skewed, with most tracts having no sites and a small number having multiple facilities. Asthma, COPD, and cancer prevalence appears relatively evenly distributed across census tracts, but there is a slight right skew since the mean is highly higher than the median. 
+
+**Waste Facility Distribution**
+This section explores how common waste sites are across census tracts. 
+
+Create a table showing the frequency of waste facilities. It should contain the following columns: Waste Site Category, Number of Tracts, Percent 
+
+```{r}
+# frequency table 
+waste_distribution <- tracts_sf_clean %>%
+  st_drop_geometry() %>%
+  mutate(site_group_label = factor(site_group_label, 
+                                   levels = c("0", "1-2", "3-6", "7-14", "15-30", "31+"))) %>%
+  count(site_group_label) %>%
+  mutate(percent = round(100 * n / sum(n), 2)) %>%
+  rename("Waste Site Category" = site_group_label,
+         "Number of Tracts" = n,
+         "Percent of Tracts" = percent)
+
+flextable(waste_distribution) %>%
+  autofit() %>%
+  align(align = "center", part = "all") %>%
+  theme_apa()
+```
+
+
+Create a histogram for waste_sites to show skew
+
+  Load in ggplot2, a package designed to visualize data. Learn more here:
+  [https://r-graph-gallery.com/ggplot2-package.html]
+
+```{r}
+library(ggplot2)
+```
+
+```{r}
+# make plot 
+waste_skew0 <- ggplot(tracts_sf_clean, aes(x = waste_sites)) +
+  geom_histogram(binwidth = 1, fill = "red", color = "white") +
+  labs(title = "Distribution of Waste Sites per Census Tract",
+       x = "Number of Waste Sites",
+       y = "Number of Census Tracts") +
+  theme_minimal()
+
+waste_skew0
+```
+
+
+**Investigate outliers**
+
+This section investigates tracts with extremely high waste site counts. It specifically focuses on the tract with 120 waste sites. 
+
+First, identify the tract with the greatest number of waste sites. 
+
+```{r}
+# isolate greatest values 
+tracts_sf_clean %>%
+  st_drop_geometry %>%
+  arrange(desc(waste_sites))%>%
+  select(GEOID, Tract_Name, waste_sites) %>%
+  head(10)
+```
+```{r}
+# look at sites inside the tract with 120 sites
+
+sites_with_tract %>%
+  filter(GEOID == "06037207305") # filter for site, see first 10 features
+
+View(sites_with_tract %>% filter(GEOID == "06037207305")) # view all the sites
+```
+
+I can see that sites are not repeats and may actually exist. I have two suspicions. First, this is a large tract located in the hilly region of the San Fernando Valley/ Los Angeles County. Second, many sites are closed because they are either smaller historical dump sites (pre-1990s) before regulations tightened on landfills. 
+
+
+```{r}
+# Map the outlier tract. 
+outlier_tract <- tracts_sf_clean %>%
+  filter(GEOID == "06037207305")
+
+ggplot() +
+  geom_sf(data = tracts_sf_clean, fill = "grey95", color = "black") +
+  geom_sf(data = outlier_tract, fill = "red", color = "red", size = 1) +
+  coord_sf(xlim = c(-119, -117), ylim = c(33.5, 35)) +
+  labs(title = "Location of High Waste Site Tract in Los Angeles County") +
+  theme_minimal()
+```
+It looks like the tract is located somewhere in a dense region of Los Angeles. Perhaps records represent historical waste sites, which have been developed over or these are multiple records for the same facility under different names. 
+
+```{r}
+# Check if many sites have the same coordinates. 
+sites_with_tract %>%
+  filter(GEOID == "06037207305") %>%
+  count(geometry, sort = TRUE)
+
+# all 120 sites have the same point location, meaning that these are duplicates or historical records. 
+```
+
+Based on the output above, 120 sites are stacked at a single coordinate. Several explanations are possible. First, the dataset may contain multiple regulatory records for a single facility, though this seems unlikely. Second, some records may represent different historic sites that were later aggregated under one location, which appears more plausible. Examining the rows within the GEOID reveals variation in the Site.Name field. Some site names reference street locations—for example, “Bradley Avenue Dump.” Other names repeat institutional owners such as “City of LA Department of Public Works.” A likely explanation is that these records correspond to smaller historic dumping sites that operated before modern regulatory systems were established. In several cases, ownership is listed as unknown, suggesting that some records may have been digitized from incomplete historical documentation or that the sites operated informally. The shared coordinate likely reflects older data-keeping practices in which facilities were assigned a generic location, such as a city centroid or approximate reference point. To investigate further, I examine the census tract associated with these records
+
+The U.S. Census Bureau provides a useful Maps tool that allows users to filter geographic entities such as census tracts: [https://data.census.gov/map?layer=VT_2022_040_00_PP_D1&loc=43.3751,-113.1138,z1.4027]. 
+
+The sites_with_tract object includes a Tract_Name column, which can be used to locate the tract within the Census Bureau map interface. In the tool, select View Filters → Geographies → Census Tract → California → Los Angeles County, then paste the tract name into the search bar and toggle on the matching tract.
+
+```{r}
+# view tract name 
+outlier_tract$Tract_Name
+```
+
+```{r}
+# Here is a screenshot of Census Tract 2075.05  U.S. Census Bureau Maps Website, which is highlighted in light blue. 
+knitr::include_graphics("Census_Tract_2073_05_Los Angeles County_California.png")
+```
+
+The tract is located in downtown Los Angeles and represents a dense urban mixed-use area.
+
+To further investigate why so many sites appear stacked at a single coordinate, I searched site names and street names using Google Maps. Although these searches could be performed in R using a Google Maps API (e.g., with the ggmap package), Google charges for API requests. Instead, I conducted the searches using the Google Maps mobile application.For reproducibility, I include the Plus Codes associated with each location and screenshots of the map results. Plus Codes are searchable location identifiers, similar to street addresses, that allow users to return to specific map locations even if they lack a formal address.After searching Google Maps, it becomes clear that street names within the census tract do not match some of the street names referenced in the site records. For example, there is no Bradley Avenue within this tract. However, Google Maps identifies two streets named Bradley Avenue elsewhere in Los Angeles.
+
+  
+      
+```{r}
+# Plus Code: 85637HV3+RP 
+## Specifically appears under the search result for : "Bradley Avenue Los Angeles, CA". It goes into the Slymar and Pacoima neighborhoods of the LA San Fernando Region. 
+
+# Display Google Maps Screenshot
+
+knitr::include_graphics("85637HV3_plus_RP.PNG")
+```
+
+```{r}
+# Plus Code: 85636JHF+HW 
+## Specifically appears under the search : "Bradley Avenue Sun Valley, CA". Sun Valley is a neighborhood located in the San Fernando valley region of LA. 
+
+# Display Google Maps Screenshot
+knitr::include_graphics("85636JHF_plus_HW.PNG")
+```
+Viewing these two locations on the map shows that the streets run in the same general direction and are located near one another. They are separated by several industrial facilities, including waste-related operations such as the Angeles C & D Public Dump. The street segments appear as though they may once have been connected before later development divided them. 
+
+Various other site names refer to streets that do not exist within the census tract but exist within the City of Los Angeles. 
+
+This pattern suggests that the coordinate associated with the stacked records likely represents a generic reference point used in older data-keeping practices rather than the true locations of the sites. The coordinate may have been assigned as a placeholder when precise geographic coordinates were unavailable. As a result, multiple historic records appear stacked at the same coordinate even though the actual dumping sites were likely located elsewhere.
+
+Going forward, I am operating the the assumption that the coordinate is a place holder location and the points do not represent real spatial positions. Including these points in a spatial analysis artificially inflates waste site counts. A small number of additional tracts contain between 31 and 40 facilites, which may also reflect stacked coordinates, though time constraints prevents further investigation. 
+
+Rather than verifying if these all tracts contain stacked points, I am going to look at tract with the 2nd highest number of waste sites and make a decision on how to analyze my data going forward. 
+
+```{r}
+# isolate greatest values again
+tracts_sf_clean %>%
+  st_drop_geometry %>%
+  arrange(desc(waste_sites))%>%
+  select(GEOID, Tract_Name, waste_sites) %>%
+  head(10)
+```
+
+
+```{r}
+# investigate tract with the second highest number of sites: 06029003304
+
+sites_with_tract%>%
+  filter(GEOID == "06029003304") # filter for site, see first 10 features
+     
+```
+
+```{r}
+# Check if many sites have the same coordinates for tract 06029003304
+sites_with_tract %>%
+  filter(GEOID == "06029003304") %>%
+  count(geometry, sort = TRUE)
+
+# view rows sharing this GEOID
+View(sites_with_tract %>% filter(GEOID == "06029003304")) 
+
+```
+The tract with the second-highest facility count (38 records)-Census Tract 33.04; Kern County; California- contains 10 unique coordinates, indicating that the records may reflect multiple facility locations rather than a single placeholder coordinate. Some site names are similar (e.g., facilities labeled “North” or “South”), suggesting related operations within the same area. However, it is possible that some coordinates represent approximate or placeholder locations and may fall slightly outside the tract boundary. The records still exhibit meaningful spatial distribution because facilities include active sites and multiple unique coordinates. Because of this, the tract and any other tracts with less waste sites will be retained in the analysis. 
+
+
+**exclude extreme outlier**
+Census Tract 2073.05 in Los Angeles County; California contains 120 waste facility records located at one identical coordinate, indicating a placeholder location used in historical data records. This tract represents an extreme anomoly compared to the rest of the dataset. 
+
+Although other tracts may contain stacked records, they still include multiple distinct coordinates suggesting some meaningful spatial distribution. Contrastingly, the Census Tract 2073.05 has one coordinate for 120 records. Including this tract would skew distribution of waste sites and distort visualizations such as histograms and scatterplots. Additionally Census Tract 2073.05 would bias statistical analysis by assigning an artificially high number of facilities to a tract where the sites may not actually be located, potentially weakening the relationship between waste site counts and health indicators. To prevent this tract from distorting the analysis, it will be excluded from tract-level calculations. All other tracts are retained. 
+
+```{r}
+# exclude Census Tract 2073.05 in Los Angeles County; California 
+tracts_analysis <- tracts_sf_clean %>% 
+  filter(GEOID!="06037207305")
+```
+
+
+**reexamaine waste site distribution ** 
+Remake the plot of waste site distribution
+```{r}
+# make plot 
+ggplot(tracts_analysis, aes(x = waste_sites)) +
+  geom_histogram(binwidth = 1, fill = "red", color = "white") +
+  labs(title = "Distribution of Waste Sites per Census Tract",
+       x = "Number of Waste Sites",
+       y = "Number of Census Tracts") +
+  theme_minimal()
+```
+Remake the table 
+```{r}
+waste_distribution <- tracts_analysis %>%
+  st_drop_geometry() %>%
+  mutate(site_group_label = factor(site_group_label, 
+                                   levels = c("0", "1-2", "3-6", "7-14", "15-30", "31+"))) %>%
+  count(site_group_label) %>%
+  mutate(percent = round(100 * n / sum(n), 2)) %>%
+  rename("Waste Site Category" = site_group_label,
+         "Number of Tracts" = n,
+         "Percent of Tracts" = percent)
+
+flextable(waste_distribution) %>%
+  autofit() %>%
+  align(align = "center", part = "all") %>%
+  theme_apa()
+
+```
+
+--- 
+
+### Explore relationships between waste site counts and health variables 
+
+#### Linear relationships 
+
+**Scatterplots**
+Use scatterplots to display the relationship between the health variables and number of waste sites per tract. 
+
+```{r}
+# put data into long format using pivot_longer()
+health_long_df <- tracts_analysis %>%
+  st_drop_geometry() %>%
+  select(waste_sites, Asthma, COPD, Cancer) %>%
+  pivot_longer(cols = c(Asthma, COPD, Cancer),
+               names_to = "Health_Indicator",
+               values_to = "Value")
+
+```
+
+Create scatterplots showing the relationship between health variables and of waste sites present in a tract
+```{r}
+health_plot0 <- ggplot(health_long_df, aes(x = waste_sites, y = Value)) + 
+  geom_point(aes(color = Health_Indicator), alpha = 0.4, size = 1.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.7)+
+  facet_wrap(~ Health_Indicator,
+             scales = "free_y") + 
+  scale_color_manual(values = c("Asthma" = "#E64B35", # color dots
+                                "Cancer" = "#4DBBD5",
+                                "COPD" = "#00A"))+
+  labs(x = "Waste Sites per Census Tract (log scale)", # set labels for x & y axis
+       y = "Estimated Prevalence of Health Indicator (%)",
+       title = "Health Outcome vs Waste Site Exposure",
+       color = "Health Indicator" # change legend name 
+       ) +
+  theme_minimal()
+
+health_plot0
+```
+
+Create scatterplot using scale_log_10() to better visualize data. 
+```{r}
+# Scatterplot Version 1: Normal Logarithmic Plots. Any tracts with 0 sites can't be plotted on the log scale. 
+health_plot1 <- ggplot(health_long_df, aes(x = waste_sites, y = Value)) + 
+  geom_point(aes(color = Health_Indicator), alpha = 0.4, size = 1.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.7)+
+  scale_x_log10() + 
+  facet_wrap(~ Health_Indicator,
+             scales = "free_y") + 
+  scale_color_manual(values = c("Asthma" = "#E64B35", # color dots
+                                "Cancer" = "#4DBBD5",
+                                "COPD" = "#00A"))+
+  labs(x = "Waste Sites per Census Tract (log scale)", # set labels for x & y axis
+       y = "Estimated Prevalence of Health Indicator (%)",
+       title = "Health Outcome vs Waste Site Exposure",
+       color = "Health Indicator" # change legend name 
+       ) +
+  theme_minimal()
+
+health_plot1
+```
+All health variables show weak positive correlations.  
+
+```{r}
+# Scatterplot Version 2: Using log(x+1) to avoid the issue of log(0). This is simply to improve visualization + interpretability. 
+health_plot_2 <- ggplot(health_long_df, aes(x = waste_sites + 1, # adding + 1 to avoid infinites. 
+                           y = Value)) + 
+  geom_point(aes(color = Health_Indicator), alpha = 0.4, size = 1.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.7)+
+  scale_x_log10() + 
+  facet_wrap(~ Health_Indicator,
+             scales = "free_y") + 
+  scale_color_manual(values = c("Asthma" = "#E64B35", 
+                                "Cancer" = "#4DBBD5",
+                                "COPD" = "#00A"))+
+  labs(x = "Waste Sites per Census Tract (log scale)",
+       y = "Estimated Prevalence of Health Indicator (%)",
+       title = "Health Outcome vs Waste Site Exposure",
+       color = "Health Indicator"
+       ) +
+  theme_minimal()
+
+health_plot_2
+```
+
+All scatterplots show weak positive correlations. 
+
+**correlation matrix**  
+Explore the numeric relationships using a correlation matrix. 
+
+
+
+```{r}
+# Revise tracts_analysis
+glimpse(tracts_analysis)
+```
+
+```{r}
+# the tibble package contains the rownames_to_column() function, which allows users to move the row names into a column before making a table. 
+
+# open package()
+library(tibble)
+``` 
+
+```{r}
+# prep data for correlation matrix
+
+cor_data <- tracts_analysis %>%
+  st_drop_geometry() %>%
+  select(Asthma, Cancer, COPD, ageE, pct_white, pct_black, pct_asian, pct_hisp, waste_sites) 
+
+```
+
+```{r}
+# create matrix
+cor_matrix <- cor(cor_data, use = "complete.obs", method = "pearson") %>%
+  as.data.frame() %>%
+  rownames_to_column("Variable")
+
+cor_matrix
+
+```
+
+```{r}
+# visualize correlation matrix using ggplot geom_tile() function. It is also possible to do in base R() with heatmap() or using the "ggcorrplot" package, which is designed to visualize correlation matrices. 
+
+## convert to matrix to long format (for it to work in ggplot)
+
+cor_long <- cor_matrix %>%
+  rename(Var1 = Variable) %>%
+  pivot_longer(-Var1, names_to = "Var2", values_to = "correlation") %>%
+  mutate(Var1 = recode(Var1,
+                       ageE = "Median Age",
+                       pct_white = "White (%)",
+                       pct_black = "Black (%)",
+                       pct_asian = "Asian (%)",
+                       pct_hisp = "Hispanic (%)",
+                       waste_sites = "Waste Sites"),
+         Var2 = recode(Var2, 
+                       ageE = "Median Age",
+                       pct_white = "White (%)",
+                       pct_black = "Black (%)",
+                       pct_asian = "Asian (%)",
+                       pct_hisp = "Hispanic (%)",
+                       waste_sites = "Waste Sites"))
+## view results 
+cor_long
+```
+
+```{r}
+
+# ggplot orders axes alphabetically. To control the order that my variables appear in, I am creating a vector specifying the order I want. 
+var_order <- c( "Waste Sites","Asthma","COPD","Cancer","Median Age","White (%)", "Black (%)", "Asian (%)","Hispanic (%)")
+
+# apply variable order to cor_long 
+cor_long <- cor_long %>%
+  mutate( 
+    Var1 = factor(Var1, levels = var_order),
+    Var2 = factor(Var2, levels = var_order))
+
+
+# use ggplot to visualize the matrix w colors 
+Pearson_Matrix <- ggplot(cor_long, aes(Var1, Var2, fill = correlation)) +
+  geom_tile(color = "black") + # draw borders between tiles
+  geom_text(aes(label = round(correlation, 2)), size = 3) + 
+  scale_fill_gradient2(low = "#2166AC", # strong negative correlations
+                       mid = "white", # zero correlation
+                       high = "#B2182B", # strong positive correlation
+                       midpoint = 0, #w where neutral colors happen
+                       limits = c(-1, 1)) + # full correlatino range
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + # stop labels from overlapping 
+  labs(title = "Correlation Matrix of Health, Demographic, and Waste Site Variables", 
+       x = "", # Removing x-axis label
+       y = "", # Removing y-axis label
+       fill = "Pearson r")
+
+
+# References 
+## [https://r-graph-gallery.com/79-levelplot-with-ggplot2.html]
+
+Pearson_Matrix
+
+```
+Looking at the correlation matrix above, correlations between waste sites and all other variables appear rather weak. There is a very slight positive correlation between the health variables and the number of waste sites present, with COPD being the highest. 
+
+#### Regressions
+Test whether waste sites predict health outcomes, controlling for demographics
+
+Run regressions
+```{r}
+# Asthma 
+model_asthma <- lm(Asthma ~ waste_sites + pct_white + pct_black + pct_asian + pct_hisp + ageE, 
+                   data = tracts_analysis)
+model_asthma
+```
+
+```{r}
+# COPD
+model_copd <- lm(COPD ~ waste_sites + pct_white + pct_black + pct_asian + pct_hisp + ageE, 
+                 data = tracts_analysis)
+
+model_copd
+```
+Holding demographic composition and median age constant, each additional waste site is associated with a 0.15 percentage point increase in COPD prevalence. However, demographic and age variables appear to have stronger relationships with COPD rates than waste site density.
+
+```{r}
+# Cancer 
+model_cancer <- lm(Cancer ~ waste_sites + pct_white + pct_black + pct_asian + pct_hisp + ageE, 
+                   data = tracts_analysis)
+
+model_cancer
+
+```
+To better understand the regression results, create a coefficient dot-whisker plot. To do so, I am referring to the this GitHub page: [https://felixhaass.github.io/dataviz_ggplot2/session4.html]
+
+```{r}
+# load packages
+library("dotwhisker")
+library("gapminder")
+```
+
+```{r}
+# use dwplot() to select regression models 
+regression_plot <- dwplot(list(Asthma = model_asthma, Cancer = model_cancer, COPD = model_copd)) + 
+  #set colors for the health variables 
+  scale_color_manual(values = c("Asthma" = "dodgerblue2", "Cancer" = "deeppink","COPD" = "forestgreen" )) +
+  # draw a horizontal line for easier visual interpretation
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  scale_y_discrete(limits = c("waste_sites", "pct_white", "pct_black", "pct_asian", "pct_hisp", "ageE"),
+                   labels = c(waste_sites = "Waste Sites", pct_white = "% White", pct_black = "% Black", pct_asian = "% Asian", pct_hisp = "% Hispanic", ageE = "Median Age" ) ) +
+  labs(title = "Regression Estimates for Predictors of Asthma, Cancer, and COPD Prevalence (%)",
+       x = "Coefficient Estimate",
+       y = "",
+       color = NULL) +
+  theme_minimal() +
+  theme(legend.position = "top", panel.grid.minor = element_blank(), axis.text.y = element_text(size = 11), plot.title = element_text(face = "bold")
+  )
+
+# results 
+regression_plot
+```
+If the coefficient point is 0, then there is no relationship between predictor and the health outcome. Any points to the right of the dashed line indicate a positive relationship. Any points to the left of the dashed line indicate a negative relationship. The lines surroinding the coefficient represent confidence intervals. 
+
+COPD shows the strongest relationship with waste sites, as the coefficient is positive and located far to the right of 0. This means that census tracts with more waste facilities tend to have a higher COPD prevalence. The confidence interval is fully on the positive side. 
+
+Asthma shows a positive relationship, with the coefficient being slightly to the right of 0. This suggests that more waste sites are associated slightly higher asthma prevalence. The relationship is much smaller than COPD. 
+
+Cancer appears negative and near 0. This suggests a very weak negative relationship. 
+
+
+*significance*
+Here, I am looking to see whether the associations between waste site counts and the health outcomes are considered statistically signficant. If the p value is les than 0.05, then the relationship is statisically signficant. 
+
+```{r}
+# Asthma 
+summary(model_asthma)
+```
+The relationship between waste site counts and asthma prevalence is statistically signficant. 
+
+```{r}
+# Cancer
+summary(model_cancer)
+```
+The relationship between waste site counts and cancer prevalence is statistically significant. 
+
+```{r}
+summary(model_copd)
+```
+The relationship between waste site counts and COPD prevalence is statistically significant. 
+
+**summary**
+Waste site counts are positively and significantly associated with asthma and COPD prevalence, with the strongest relationship being observed for COPD. The cancer model produces a small negative coefficient for waste sites. 
+
+
+# Conclusion 
+Despite the regressions showing positive and significant associations between waste site counts and the health indicators asthma and COPD, it is difficult to draw strong conclusions from this analysis for a few reasons. 
+
+One issue is that some waste facility records appear to be stacked on the same coordinates rather than representing unique geographic locations. In some cases, multiple sites share identical coordinates, which suggests the points may be placeholders instead of exact facility locations. Because of time constraints, I was not able to fully investigate every site to confirm whether the coordinates reflect the true location of each facility. This means that the number of waste sites assigned to some census tracts may not perfectly represent the actual distribution of facilities.
+
+
+Another possible confounding factor is the presence of other environmental hazards that were not included in this analysis. Waste facilities are not the only potential sources of environmental exposure. Some of these areas may also be located near other types of industrial sites, such as refineries or other facilities that produce pollution. If that is the case, it becomes difficult to determine whether the patterns observed in the data are related specifically to waste sites or to broader environmental conditions in those areas. It would have been great to run regressions that controlled for the presence of other types of industrial sites. However, time constaints did not make such regressions possiible. 
+
+There were also limitations related to available health data. While the CDC PLACES dataset provides several tract-level health indicators, many potentially relevant outcomes were not available at the same scale. For example, I was interested in exploring birth outcomes, since they are often used in environmental health research, but I was not able to include this data due to spatial or temporal incompatibilities between datasets.
+
+Because of these limitations, I am not fully confident in the strength of the relationships shown in this analysis. However, the results are still useful for exploring possible spatial patterns between waste facility locations and health outcomes. The analysis helped highlight areas where environmental facilities and certain health indicators appear to overlap.
+Overall, this project raises questions that could be explored further with more precise facility location data and additional health indicators. In particular, incorporating birth outcome data and accounting for other nearby industrial facilities could provide a better understanding of how environmental exposures may affect community health.
+
+# References 
+ACTenviro. (2025, April 1). What is leachate: hidden dangers in landfill water. https://www.actenviro.com/what-is-leachate/ 
+
+Brender, J. D., Maantay, J. A., & Chakraborty, J. (2011). Residential proximity to environmental hazards and adverse health outcomes. American journal of public health, 101 Suppl 1(Suppl 1), S37–S52. https://doi.org/10.2105/AJPH.2011.300183 
+
+Chen, Y., Xu, W., Zhan, L. et al. Geoenvironmental Issues in High-Food-Waste-Content Municipal Solid Waste Landfills. J Indian Inst Sci 101, 603–623 (2021). https://doi.org/10.1007/s41745-021-00233-5 
+California Environmental Protection Agency [CalEPA]. (n.d.) Chiquita Canyon Landfill Response. https://calepa.ca.gov/chiquita-canyon-response/ 
+
+Kiszla, C. (2024, October 15). Chiquita Canyon Landfill’s toxic fumes causing cancer cluster, neighbors say. https://ktla.com/news/local-news/chiquita-canyon-landfills-toxic-fumes-causing-cancer-cluster-neighbors-say/ 
+
+EPA. (2024, September). Enforcement alter: EPA finds MSW landfills are violating monitoring and maintenance requirements. https://www.epa.gov/enforcement/enforcement-alert-epa-finds-msw-landfills-are-violating-monitoring-and-maintenance
+
+EPA. (2025a, March 11). Municipal solid waste landfills. https://www.epa.gov/landfills/municipal-solid-waste-landfills#:~:text=A%20municipal%20solid%20waste%20landfill%20(MSWLF)%20is%20a%20discrete%20area,and%20industrial%20nonhazardous%20solid%20waste.
+EPA. (2025b, March 13). Health Effects of Ozone Pollution. https://www.epa.gov/ground-level-ozone-pollution/health-effects-ozone-pollution 
+
+EPA. (2025c, December 11). Composting. https://www.epa.gov/sustainable-management-food/composting 
+
+Khanna, K. (2022, May 6). How methanogenic archaea contribute to climate change. https://asm.org/articles/2022/may/how-methanogenic-archaea-contribute-to-climate-cha#:~:text=Methanogenic%20archaea%20are%20the%20only,a%20significant%20amount%20of%20methane. 
+
+Siddiqua, A., Hahladakis, J.N. & Al-Attiya, W.A.K.A. An overview of the environmental pollution and health effects associated with waste landfilling and open dumping. Environ Sci Pollut Res 29, 58514–58536 (2022). https://doi.org/10.1007/s11356-022-21578-z 
+
+South Coast Air Quality Management District. (2025, March 20). Sunshine Canyon Landfill required to take stronger actions to address odors. https://www.aqmd.gov/docs/default-source/news-archive/2025/scl-3-20-2025.pdf 
+
+
+Rector, J. (2018). The Spirit of Black Lake: Full Employment, Civil Rights, and the Forgotten Early History of Environmental Justice. Modern American History, 1(1), 45–66. https://doi.org/10.1017/mah.2017.18 
+
+
