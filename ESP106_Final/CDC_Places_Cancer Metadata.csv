@@ -1,0 +1,11 @@
+"column_name","full_label","length","data_type","decimal_places","source"
+"GeoID_Description","description of geography type",24,"string",,
+"GeoID_Name","name of geography",225,"string",,
+"SitsinState","state in which geography sits",2,"string",,
+"GeoID","identifier",24,"string",,
+"GeoID_Formatted","formatted identifier",24,"string",,
+"p_crd_cancer","Estimated prevalence of cancer (excluding skin cancer) among adults aged 18 or older in 2023.",7,"decimal",1,"CDC_PLACES",
+"TimeFrame","year",6,"date",,
+"GeoVintage","boundary vintage to which data is mapped",6,"date",,
+"Source","data source",130,"string",,
+"Location","predefined location or custom region",225,"string",,
